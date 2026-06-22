@@ -129,21 +129,30 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
     if user_id not in ALLOWED_USERS:
-        await query.edit_message_text("⛔ Нет доступа.")
+        await query.edit_message_reply_markup(reply_markup=None)
+        await context.bot.send_message(chat_id=chat_id, text="⛔ Нет доступа.")
         return
 
     if query.data == "skip_characteristics":
         user_states[chat_id] = "generating"
-        await query.edit_message_text("⏳ Генерирую текст на основе фото...")
+        await query.edit_message_text("⏭ Характеристики пропущены. Генерирую текст на основе фото...")
         await generate_and_show(update, context, chat_id, "")
 
     elif query.data == "post_now":
-        await query.edit_message_text("⏳ Публикую...")
+        await query.edit_message_text(
+            query.message.text.split("---")[0].strip() +
+            "\n\n---\n✅ Выбрано: *Публиковать сейчас*",
+            parse_mode="Markdown"
+        )
         await publish_post(context, chat_id)
 
     elif query.data == "post_scheduled":
         next_time, time_label = get_next_best_time()
-        await query.edit_message_text(f"⏰ Пост запланирован на {time_label}!\nОпубликую автоматически.")
+        await query.edit_message_text(
+            query.message.text.split("---")[0].strip() +
+            f"\n\n---\n⏰ Выбрано: *Запланировано на {time_label}*",
+            parse_mode="Markdown"
+        )
         delay = (next_time - datetime.now()).total_seconds()
         asyncio.get_event_loop().call_later(
             delay,
@@ -152,12 +161,20 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif query.data == "edit_post":
         user_states[chat_id] = "waiting_edit"
-        await query.edit_message_text("✏️ Напиши новый текст — покажу снова на проверку:")
+        await query.edit_message_text(
+            query.message.text.split("---")[0].strip() +
+            "\n\n---\n✏️ Выбрано: *Изменить текст*\n\nНапиши новый текст:",
+            parse_mode="Markdown"
+        )
 
     elif query.data == "cancel_post":
         pending_posts.pop(chat_id, None)
         user_states.pop(chat_id, None)
-        await query.edit_message_text("❌ Публикация отменена.")
+        await query.edit_message_text(
+            query.message.text.split("---")[0].strip() +
+            "\n\n---\n❌ Выбрано: *Отменено*",
+            parse_mode="Markdown"
+        )
 
 
 async def publish_post(context, chat_id):
@@ -196,7 +213,17 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_callback))
 
     logger.info("Бот запущен!")
-    app.run_polling()
+    app.run_polling(
+        drop_pending_updates=True,  # игнорируем накопившиеся апдейты при старте
+        allowed_updates=Update.ALL_TYPES,
+    )
 
 if __name__ == "__main__":
-    main()
+    import time
+    while True:
+        try:
+            main()
+        except Exception as e:
+            logger.error(f"Бот упал с ошибкой: {e}. Перезапуск через 5 секунд...")
+            time.sleep(5)
+# Этот блок заменяет функцию main() — скопируй весь файл целиком
