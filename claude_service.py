@@ -3,17 +3,16 @@ import base64
 import os
 
 BRAND_HASHTAGS = {
-    "настольная лампа": ("#domsvetalamp", "настольных ламп"),
-    "плафонная люстра": ("#domsvetaplaf", "плафонных люстр"),
-    "классическая люстра": ("#domsvetaclassic", "классических люстр"),
-    "светодиодная люстра": ("#domsvetaled", "светодиодных люстр"),
-    "торшер": ("#domsvetaторшер", "торшеров"),
-    "садовый светильник": ("#domsvetadvor", "садово-парковых светильников"),
-    "лофт": ("#domsvetaloft", "светильников в стиле лофт"),
+    "настольная лампа": ("#domsvetalamp", "настольних ламп"),
+    "плафонная люстра": ("#domsvetaplaf", "плафонних люстр"),
+    "классическая люстра": ("#domsvetaclassic", "класичних люстр"),
+    "светодиодная люстра": ("#domsvetaled", "світлодіодних люстр"),
+    "торшер": ("#domsvetaторшер", "торшерів"),
+    "садовый светильник": ("#domsvetadvor", "садово-паркових світильників"),
+    "лофт": ("#domsvetaloft", "світильників у стилі лофт"),
 }
 
-async def generate_post_text(photo_bytes: bytes, characteristics: str = "") -> tuple[str, str]:
-    """Возвращает (текст_для_поста, текст_с_геотегом_для_превью)"""
+async def generate_post_text(photo_bytes: bytes, characteristics: str = "") -> tuple:
     client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
     image_data = base64.standard_b64encode(photo_bytes).decode("utf-8")
 
@@ -39,37 +38,37 @@ async def generate_post_text(photo_bytes: bytes, characteristics: str = "") -> t
                 },
                 {
                     "type": "text",
-                    "text": f"""Ты — профессиональный копирайтер для интернет-магазина люстр "Дом Света" (Харьков, Украина).
+                    "text": f"""Ти — професійний копірайтер для інтернет-магазину люстр "Дом Света" (Харків, Україна).
 
-Посмотри на фото и выполни два задания:
+Подивись на фото і виконай два завдання:
 
-=== ЗАДАНИЕ 1: КАТЕГОРИЯ ===
-Определи категорию из списка (выбери одну):
+=== ЗАВДАННЯ 1: КАТЕГОРІЯ ===
+Визнач категорію з списку (вибери одну):
 {categories}
 
-=== ЗАДАНИЕ 2: ПОСТ ===
+=== ЗАВДАННЯ 2: ПОСТ ===
 {char_block}
 
 ПРАВИЛА INSTAGRAM 2026:
 
 1. СТРУКТУРА:
-   - Строки 1-2: яркий крючок с эмодзи (видно до "читать далее")
-   - Основная часть: описание, материал, стиль, преимущества, для каких интерьеров
-   - SEO-ключевые слова естественно в тексте
-   - Предпоследняя строка: "Більше [название категории] знайдете у нас на сайті за посиланням у шапці профілю або за хештегом [BRAND_HASHTAG]"
-   - Длина: 150-250 слов
+   - Рядки 1-2: яскравий гачок з емодзі (видно до "читати далі")
+   - Основна частина: опис, матеріал, стиль, переваги, для яких інтер'єрів
+   - SEO-ключові слова природно в тексті
+   - Передостанній абзац ОБОВ'ЯЗКОВО: "Більше [назва категорії] знайдете у нас на сайті за посиланням у шапці профілю або за хештегом [BRAND_HASHTAG]"
+   - Довжина: 150-250 слів
 
-2. ХЕШТЕГИ (ровно 5 — жёсткий лимит 2026!):
-   - 1 широкий: #люстра или #світильник
-   - 2 нишевых: стиль/материал (русский + английский)
-   - 1 локальный: #харків
-   - 1 брендовый: [BRAND_HASHTAG]
+2. ХЕШТЕГИ (рівно 4 — після тексту, окремим рядком):
+   - 1 широкий: #люстра або #світильник
+   - 2 нішевих: стиль/матеріал
+   - 1 локальний: #харків
+   - НЕ додавай брендовий хештег у блок хештегів — він вже є в тексті!
 
-=== ФОРМАТ ОТВЕТА ===
-КАТЕГОРИЯ: [категория]
+=== ФОРМАТ ВІДПОВІДІ ===
+КАТЕГОРІЯ: [категорія]
 
 ТЕКСТ ПОСТА:
-[полный текст с хештегами]
+[повний текст з хештегами в кінці]
 
 ГЕОТЕГ: Харків / Kharkiv, Ukraine"""
                 }
@@ -84,9 +83,9 @@ async def generate_post_text(photo_bytes: bytes, characteristics: str = "") -> t
     mode = None
 
     for line in raw.strip().split("\n"):
-        if line.startswith("КАТЕГОРИЯ:"):
-            category = line.replace("КАТЕГОРИЯ:", "").strip().lower()
-        elif line.startswith("ТЕКСТ ПОСТА:"):
+        if line.startswith("КАТЕГОРІЯ:") or line.startswith("КАТЕГОРИЯ:"):
+            category = line.split(":", 1)[1].strip().lower()
+        elif line.startswith("ТЕКСТ ПОСТА:") or line.startswith("ТЕКСТ ПОСТУ:"):
             mode = "post"
         elif line.startswith("ГЕОТЕГ:"):
             mode = None
@@ -96,20 +95,24 @@ async def generate_post_text(photo_bytes: bytes, characteristics: str = "") -> t
 
     post_text = post_text.strip()
 
-    # Подставляем брендовый хештег
-    brand_hashtag = ""
+    # Подставляем брендовый хештег в текст
     for key, (hashtag, category_name) in BRAND_HASHTAGS.items():
         if key in category:
-            brand_hashtag = hashtag
             post_text = post_text.replace("[BRAND_HASHTAG]", hashtag)
+            # Если Claude не вставил хештег в текст — добавляем принудительно
             if hashtag not in post_text:
-                post_text += f"\n{hashtag}"
+                # Ищем фразу про сайт и добавляем хештег после неё
+                phrases = ["за хештегом", "за хэштегом"]
+                for phrase in phrases:
+                    if phrase in post_text:
+                        idx = post_text.find(phrase) + len(phrase)
+                        post_text = post_text[:idx] + f" {hashtag}" + post_text[idx:]
+                        break
+                else:
+                    post_text += f"\n{hashtag}"
             break
 
-    # Текст для публикации — без геотега
     post_for_publishing = post_text
-
-    # Текст для превью — с геотегом
     post_for_preview = post_text
     if geotag:
         post_for_preview += f"\n\n📍 Геотег для ручного добавления: {geotag}"
