@@ -189,11 +189,12 @@ async def publish_post(context, chat_id):
     fb_result = await post_to_facebook(photo_bytes, post_text)
     ig_result = await post_to_instagram(photo_bytes, post_text)
 
-    message = "✅ *Опубликовано!*\n\n"
-    message += f"📘 Facebook: {'✅ ' + fb_result.get('url', 'опубликовано') if fb_result.get('success') else '❌ ' + fb_result.get('error', 'ошибка')}\n"
-    message += f"📷 Instagram: {'✅ ' + ig_result.get('url', 'опубликовано') if ig_result.get('success') else '❌ ' + ig_result.get('error', 'ошибка')}\n"
+    fb_status = f"✅ {fb_result.get('url', 'опубликовано')}" if fb_result.get('success') else f"❌ {fb_result.get('error', 'ошибка')}"
+    ig_status = f"✅ {ig_result.get('url', 'опубликовано')}" if ig_result.get('success') else f"❌ {ig_result.get('error', 'ошибка')}"
 
-    await context.bot.send_message(chat_id=chat_id, text=message, parse_mode="Markdown")
+    message = f"✅ Опубликовано!\n\n📘 Facebook: {fb_status}\n📷 Instagram: {ig_status}"
+
+    await context.bot.send_message(chat_id=chat_id, text=message)
 
 
 async def publish_scheduled(context, chat_id):
