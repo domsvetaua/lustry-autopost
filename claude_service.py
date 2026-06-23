@@ -137,8 +137,10 @@ INSTAGRAM:
             words = line.split()
             clean_words = [w for w in words if not w.startswith("#")]
             clean_line = " ".join(clean_words)
-            # Если осталась фраза "за хештегом" без хештега — убираем её
-            clean_line = clean_line.replace("або за хештегом", "").replace("за хештегом", "").strip()
+            # Если строка содержит ТОЛЬКО "за хештегом" без продолжения — убираем
+            # Но не трогаем строки где есть нормальный текст перед этим
+            import re
+            clean_line = re.sub(r"\s*(або за хештегом|за хештегом)\s*$", "", clean_line).strip()
             if clean_line:
                 clean_fb_lines.append(clean_line)
         fb_text = "\n".join(clean_fb_lines).strip()
