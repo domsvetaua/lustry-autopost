@@ -6,6 +6,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, MessageHandler, CommandHandler, CallbackQueryHandler, filters, ContextTypes
 from claude_service import generate_post_text
 from social_poster import post_to_facebook, post_to_instagram
+from token_manager import manual_refresh, notify_token_error
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -202,6 +203,29 @@ async def publish_scheduled(context, chat_id):
     await publish_post(context, chat_id)
 
 
+async def refresh_token(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id not in ALLOWED_USERS:
+        await update.message.reply_text("⛔ У вас нет доступа.")
+        return
+
+    args = context.args
+    if not args:
+        await update.message.reply_text(
+            "Использование: /refresh_token ВАШ_USER_TOKEN\n\n"
+            "Токен можно получить на developers.facebook.com/tools/explorer"
+        )
+        return
+
+    new_token = args[0]
+    await update.message.reply_text("⏳ Обновляю токены...")
+    success = await manual_refresh(new_token)
+    if success:
+        await update.message.reply_text("✅ Токены успешно обновлены! Теперь можно постить.")
+    else:
+        await update.message.reply_text("❌ Не удалось обновить токены. Проверь правильность токена.")
+
+
 def main():
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     if not token:
@@ -211,6 +235,8 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("refresh_token", refresh_token))
     app.add_handler(CallbackQueryHandler(handle_callback))
 
     logger.info("Бот запущен!")
