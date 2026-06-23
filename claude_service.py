@@ -126,17 +126,21 @@ INSTAGRAM:
         fb_text = fb_text.replace("[BRAND_HASHTAG]", brand_hashtag)
         ig_text = ig_text.replace("[BRAND_HASHTAG]", brand_hashtag)
 
-        # === FACEBOOK: убираем ВСЕ хештеги и брендовые теги из текста ===
+        # === FACEBOOK: убираем ВСЕ хештеги, чистим текст ===
         fb_lines = fb_text.strip().split("\n")
         clean_fb_lines = []
         for line in fb_lines:
             stripped = line.strip()
             if stripped.startswith("#"):
                 continue
-            # Убираем хештеги из середины строк тоже
+            # Убираем хештеги из середины строк
             words = line.split()
             clean_words = [w for w in words if not w.startswith("#")]
-            clean_fb_lines.append(" ".join(clean_words))
+            clean_line = " ".join(clean_words)
+            # Если осталась фраза "за хештегом" без хештега — убираем её
+            clean_line = clean_line.replace("або за хештегом", "").replace("за хештегом", "").strip()
+            if clean_line:
+                clean_fb_lines.append(clean_line)
         fb_text = "\n".join(clean_fb_lines).strip()
 
         # === INSTAGRAM: чистим хештеги ===
