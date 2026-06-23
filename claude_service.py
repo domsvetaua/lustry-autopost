@@ -137,21 +137,28 @@ INSTAGRAM:
         fb_text = "\n".join(clean_fb_lines).strip()
 
         # === INSTAGRAM: чистим хештеги ===
-        brand_variations = ["#домсвіта", "#домсвета", "#domsvetakharkiv", "#домсветахарків"]
+        # Список тегов которые нельзя использовать нигде кроме фразы в тексте
+        banned_tags = ["#домсвіта", "#домсвета", "#domsvetakharkiv", "#домсветахарків",
+                       "#домсвета_харків", "#domsveta_kharkiv"]
+        # Добавляем сам брендовый тег в список запрещённых ДЛЯ БЛОКА ХЕШТЕГОВ
+        banned_in_hashtag_block = banned_tags + [brand_hashtag]
 
         ig_lines = ig_text.strip().split("\n")
         clean_ig_lines = []
         for line in ig_lines:
             stripped = line.strip()
-            # Убираем строки где только брендовые теги которые не нужны
             if stripped.startswith("#"):
-                # Убираем ненужные брендовые теги из строки хештегов
+                # Из блока хештегов убираем брендовый тег и запрещённые
                 tags = stripped.split()
-                clean_tags = [t for t in tags if t.lower() not in brand_variations]
+                clean_tags = [t for t in tags if t.lower() not in [b.lower() for b in banned_in_hashtag_block]]
                 if clean_tags:
                     clean_ig_lines.append(" ".join(clean_tags))
             else:
-                clean_ig_lines.append(line)
+                # Из текста убираем только запрещённые (не брендовый)
+                clean_line = line
+                for bad in banned_tags:
+                    clean_line = clean_line.replace(bad, "").replace(bad.lower(), "")
+                clean_ig_lines.append(clean_line)
         ig_text = "\n".join(clean_ig_lines).strip()
 
         # Убедимся что брендовый хештег есть в тексте (в фразе "за хештегом")
