@@ -6,7 +6,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, MessageHandler, CommandHandler, CallbackQueryHandler, filters, ContextTypes
 from claude_service import generate_post_text
 from social_poster import post_to_facebook, post_to_instagram
-from token_manager import manual_refresh, notify_token_error
+from token_manager import manual_refresh
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -37,9 +37,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⛔ У вас нет доступа.")
         return
     await update.message.reply_text(
-        "👋 Привет! Отправь фото люстры.\n\n"
-        "После фото можешь добавить характеристики (материал, размер, цена) — это улучшит описание.\n\n"
-        "Я создам текст по правилам Instagram 2026 и покажу на проверку перед публикацией."
+        "👋 Привіт! Відправ фото люстри.\n\n"
+        "Після фото можеш додати характеристики (матеріал, розмір, ціна) — це покращить опис.\n\n"
+        "Я створю окремі тексти для Facebook і Instagram з урахуванням алгоритмів 2026!"
     )
 
 
@@ -57,12 +57,12 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     pending_posts[chat_id] = {"photo_bytes": bytes(photo_bytes)}
     user_states[chat_id] = "waiting_characteristics"
 
-    keyboard = [[InlineKeyboardButton("⏭ Пропустить", callback_data="skip_characteristics")]]
+    keyboard = [[InlineKeyboardButton("⏭ Пропустити", callback_data="skip_characteristics")]]
     await update.message.reply_text(
-        "📸 Фото получено!\n\n"
-        "✍️ Напиши характеристики (необязательно):\n"
-        "_Например: хрусталь, диаметр 60см, 6 ламп, арт-деко, 4500 грн_\n\n"
-        "Или нажми Пропустить.",
+        "📸 Фото отримано!\n\n"
+        "✍️ Напиши характеристики (необов'язково):\n"
+        "_Наприклад: хрусталь, діаметр 60см, 6 ламп, арт-деко, 4500 грн_\n\n"
+        "Або натисни Пропустити.",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown"
     )
@@ -81,43 +81,66 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_states[chat_id] = "generating"
         await generate_and_show(update, context, chat_id, update.message.text)
 
-    elif state == "waiting_edit":
-        new_text = update.message.text
-        pending_posts[chat_id]["post_for_publishing"] = new_text
-        pending_posts[chat_id]["post_for_preview"] = new_text
+    elif state == "waiting_edit_fb":
+        pending_posts[chat_id]["fb_text"] = update.message.text
         user_states.pop(chat_id, None)
-        await show_preview(context, chat_id, new_text)
+        await show_fb_preview(context, chat_id, update.message.text)
+
+    elif state == "waiting_edit_ig":
+        pending_posts[chat_id]["ig_text"] = update.message.text
+        pending_posts[chat_id]["ig_preview"] = update.message.text
+        user_states.pop(chat_id, None)
+        await show_ig_preview(context, chat_id, update.message.text)
 
 
 async def generate_and_show(update, context, chat_id, characteristics=""):
-    msg = await context.bot.send_message(chat_id=chat_id, text="⏳ Анализирую фото и генерирую текст...")
+    msg = await context.bot.send_message(chat_id=chat_id, text="⏳ Генерую два тексти — для Facebook і Instagram...")
     try:
         photo_bytes = pending_posts[chat_id]["photo_bytes"]
-        post_for_publishing, post_for_preview = await generate_post_text(photo_bytes, characteristics)
+        fb_text, ig_text, fb_preview, ig_preview = await generate_post_text(photo_bytes, characteristics)
 
-        pending_posts[chat_id]["post_for_publishing"] = post_for_publishing
-        pending_posts[chat_id]["post_for_preview"] = post_for_preview
+        pending_posts[chat_id]["fb_text"] = fb_text
+        pending_posts[chat_id]["ig_text"] = ig_text
+        pending_posts[chat_id]["ig_preview"] = ig_preview
         user_states.pop(chat_id, None)
 
         await context.bot.delete_message(chat_id=chat_id, message_id=msg.message_id)
-        await show_preview(context, chat_id, post_for_preview)
+
+        # Сначала показываем Facebook
+        await show_fb_preview(context, chat_id, fb_preview)
 
     except Exception as e:
-        logger.error(f"Ошибка: {e}")
-        await context.bot.edit_message_text(chat_id=chat_id, message_id=msg.message_id, text=f"❌ Ошибка: {str(e)}")
+        logger.error(f"Помилка: {e}")
+        await context.bot.edit_message_text(chat_id=chat_id, message_id=msg.message_id, text=f"❌ Помилка: {str(e)}")
 
 
-async def show_preview(context, chat_id, preview_text):
+async def show_fb_preview(context, chat_id, fb_text):
     _, time_label = get_next_best_time()
     keyboard = [
-        [InlineKeyboardButton("✅ Публиковать сейчас", callback_data="post_now")],
-        [InlineKeyboardButton(f"⏰ Запланировать на {time_label}", callback_data="post_scheduled")],
-        [InlineKeyboardButton("✏️ Изменить текст", callback_data="edit_post")],
-        [InlineKeyboardButton("❌ Отменить", callback_data="cancel_post")],
+        [InlineKeyboardButton("✅ Опублікувати зараз", callback_data="fb_post_now")],
+        [InlineKeyboardButton(f"⏰ Запланувати на {time_label}", callback_data="fb_post_scheduled")],
+        [InlineKeyboardButton("✏️ Змінити текст", callback_data="fb_edit")],
+        [InlineKeyboardButton("❌ Пропустити Facebook", callback_data="fb_skip")],
     ]
     await context.bot.send_message(
         chat_id=chat_id,
-        text=f"📝 *Готовый пост:*\n\n{preview_text}\n\n---\nЧто делаем?",
+        text=f"📘 *Текст для Facebook:*\n\n{fb_text}\n\n---\nЩо робимо з Facebook?",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
+    )
+
+
+async def show_ig_preview(context, chat_id, ig_preview):
+    _, time_label = get_next_best_time()
+    keyboard = [
+        [InlineKeyboardButton("✅ Опублікувати зараз", callback_data="ig_post_now")],
+        [InlineKeyboardButton(f"⏰ Запланувати на {time_label}", callback_data="ig_post_scheduled")],
+        [InlineKeyboardButton("✏️ Змінити текст", callback_data="ig_edit")],
+        [InlineKeyboardButton("❌ Пропустити Instagram", callback_data="ig_skip")],
+    ]
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=f"📷 *Текст для Instagram:*\n\n{ig_preview}\n\n---\nЩо робимо з Instagram?",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown"
     )
@@ -130,121 +153,153 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
     if user_id not in ALLOWED_USERS:
-        await query.edit_message_reply_markup(reply_markup=None)
-        await context.bot.send_message(chat_id=chat_id, text="⛔ Нет доступа.")
+        await query.edit_message_text("⛔ Немає доступу.")
         return
 
+    # Skip characteristics
     if query.data == "skip_characteristics":
         user_states[chat_id] = "generating"
-        await query.edit_message_text("⏭ Характеристики пропущены. Генерирую текст на основе фото...")
+        await query.edit_message_text("⏳ Генерую тексти для Facebook і Instagram...")
         await generate_and_show(update, context, chat_id, "")
 
-    elif query.data == "post_now":
+    # Facebook callbacks
+    elif query.data == "fb_post_now":
         await query.edit_message_text(
-            query.message.text.split("---")[0].strip() +
-            "\n\n---\n✅ Выбрано: *Публиковать сейчас*",
-            parse_mode="Markdown"
+            query.message.text.split("---")[0].strip() + "\n\n---\n✅ Вибрано: опублікувати зараз"
         )
-        await publish_post(context, chat_id)
+        await publish_facebook(context, chat_id)
 
-    elif query.data == "post_scheduled":
+    elif query.data == "fb_post_scheduled":
         next_time, time_label = get_next_best_time()
         await query.edit_message_text(
-            query.message.text.split("---")[0].strip() +
-            f"\n\n---\n⏰ Выбрано: *Запланировано на {time_label}*",
-            parse_mode="Markdown"
+            query.message.text.split("---")[0].strip() + f"\n\n---\n⏰ Вибрано: заплановано на {time_label}"
         )
         delay = (next_time - datetime.now()).total_seconds()
         asyncio.get_event_loop().call_later(
-            delay,
-            lambda: asyncio.ensure_future(publish_scheduled(context, chat_id))
+            delay, lambda: asyncio.ensure_future(publish_facebook_scheduled(context, chat_id))
         )
+        # Сразу показываем Instagram
+        await show_ig_preview(context, chat_id, pending_posts[chat_id].get("ig_preview", ""))
 
-    elif query.data == "edit_post":
-        user_states[chat_id] = "waiting_edit"
+    elif query.data == "fb_edit":
+        user_states[chat_id] = "waiting_edit_fb"
         await query.edit_message_text(
-            query.message.text.split("---")[0].strip() +
-            "\n\n---\n✏️ Выбрано: *Изменить текст*\n\nНапиши новый текст:",
-            parse_mode="Markdown"
+            query.message.text.split("---")[0].strip() + "\n\n---\n✏️ Вибрано: змінити текст\n\nНадішли новий текст:"
         )
 
-    elif query.data == "cancel_post":
+    elif query.data == "fb_skip":
+        await query.edit_message_text(
+            query.message.text.split("---")[0].strip() + "\n\n---\n⏭ Facebook пропущено"
+        )
+        await show_ig_preview(context, chat_id, pending_posts[chat_id].get("ig_preview", ""))
+
+    # Instagram callbacks
+    elif query.data == "ig_post_now":
+        await query.edit_message_text(
+            query.message.text.split("---")[0].strip() + "\n\n---\n✅ Вибрано: опублікувати зараз"
+        )
+        await publish_instagram(context, chat_id)
+
+    elif query.data == "ig_post_scheduled":
+        next_time, time_label = get_next_best_time()
+        await query.edit_message_text(
+            query.message.text.split("---")[0].strip() + f"\n\n---\n⏰ Вибрано: заплановано на {time_label}"
+        )
+        delay = (next_time - datetime.now()).total_seconds()
+        asyncio.get_event_loop().call_later(
+            delay, lambda: asyncio.ensure_future(publish_instagram_scheduled(context, chat_id))
+        )
+
+    elif query.data == "ig_edit":
+        user_states[chat_id] = "waiting_edit_ig"
+        await query.edit_message_text(
+            query.message.text.split("---")[0].strip() + "\n\n---\n✏️ Вибрано: змінити текст\n\nНадішли новий текст:"
+        )
+
+    elif query.data == "ig_skip":
+        await query.edit_message_text(
+            query.message.text.split("---")[0].strip() + "\n\n---\n⏭ Instagram пропущено"
+        )
         pending_posts.pop(chat_id, None)
-        user_states.pop(chat_id, None)
-        await query.edit_message_text(
-            query.message.text.split("---")[0].strip() +
-            "\n\n---\n❌ Выбрано: *Отменено*",
-            parse_mode="Markdown"
-        )
 
 
-async def publish_post(context, chat_id):
+async def publish_facebook(context, chat_id):
     if chat_id not in pending_posts:
-        await context.bot.send_message(chat_id=chat_id, text="❌ Пост не найден. Отправь фото заново.")
+        await context.bot.send_message(chat_id=chat_id, text="❌ Пост не знайдено. Надішли фото знову.")
         return
 
-    post_data = pending_posts.pop(chat_id)
-    photo_bytes = post_data["photo_bytes"]
-    post_text = post_data["post_for_publishing"]  # без геотега
+    post_data = pending_posts[chat_id]
+    result = await post_to_facebook(post_data["photo_bytes"], post_data["fb_text"])
 
-    fb_result = await post_to_facebook(photo_bytes, post_text)
-    ig_result = await post_to_instagram(photo_bytes, post_text)
+    if result.get("success"):
+        await context.bot.send_message(chat_id=chat_id, text=f"📘 Facebook опубліковано!\n{result.get('url', '')}")
+    else:
+        await context.bot.send_message(chat_id=chat_id, text=f"📘 Facebook: ❌ {result.get('error', 'помилка')}")
 
-    fb_status = f"✅ {fb_result.get('url', 'опубликовано')}" if fb_result.get('success') else f"❌ {fb_result.get('error', 'ошибка')}"
-    ig_status = f"✅ {ig_result.get('url', 'опубликовано')}" if ig_result.get('success') else f"❌ {ig_result.get('error', 'ошибка')}"
-
-    message = f"✅ Опубликовано!\n\n📘 Facebook: {fb_status}\n📷 Instagram: {ig_status}"
-
-    await context.bot.send_message(chat_id=chat_id, text=message)
+    # После Facebook показываем Instagram
+    if chat_id in pending_posts:
+        await show_ig_preview(context, chat_id, pending_posts[chat_id].get("ig_preview", ""))
 
 
-async def publish_scheduled(context, chat_id):
-    await context.bot.send_message(chat_id=chat_id, text="⏰ Время пришло! Публикую запланированный пост...")
-    await publish_post(context, chat_id)
+async def publish_instagram(context, chat_id):
+    if chat_id not in pending_posts:
+        await context.bot.send_message(chat_id=chat_id, text="❌ Пост не знайдено. Надішли фото знову.")
+        return
+
+    post_data = pending_posts[chat_id]
+    result = await post_to_instagram(post_data["photo_bytes"], post_data["ig_text"])
+
+    if result.get("success"):
+        await context.bot.send_message(chat_id=chat_id, text=f"📷 Instagram опубліковано!\n{result.get('url', '')}")
+    else:
+        await context.bot.send_message(chat_id=chat_id, text=f"📷 Instagram: ❌ {result.get('error', 'помилка')}")
+
+    pending_posts.pop(chat_id, None)
+
+
+async def publish_facebook_scheduled(context, chat_id):
+    await context.bot.send_message(chat_id=chat_id, text="⏰ Час прийшов! Публікую Facebook...")
+    await publish_facebook(context, chat_id)
+
+
+async def publish_instagram_scheduled(context, chat_id):
+    await context.bot.send_message(chat_id=chat_id, text="⏰ Час прийшов! Публікую Instagram...")
+    await publish_instagram(context, chat_id)
 
 
 async def refresh_token(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id not in ALLOWED_USERS:
-        await update.message.reply_text("⛔ У вас нет доступа.")
+    if update.effective_user.id not in ALLOWED_USERS:
         return
-
     args = context.args
     if not args:
         await update.message.reply_text(
-            "Использование: /refresh_token ВАШ_USER_TOKEN\n\n"
-            "Токен можно получить на developers.facebook.com/tools/explorer"
+            "Використання: /refresh_token ВАШ_USER_TOKEN\n\n"
+            "Токен можна отримати на developers.facebook.com/tools/explorer"
         )
         return
-
-    new_token = args[0]
-    await update.message.reply_text("⏳ Обновляю токены...")
-    success = await manual_refresh(new_token)
+    await update.message.reply_text("⏳ Оновлюю токени...")
+    success = await manual_refresh(args[0])
     if success:
-        await update.message.reply_text("✅ Токены успешно обновлены! Теперь можно постить.")
+        await update.message.reply_text("✅ Токени успішно оновлено!")
     else:
-        await update.message.reply_text("❌ Не удалось обновить токены. Проверь правильность токена.")
+        await update.message.reply_text("❌ Не вдалось оновити токени. Перевір правильність токена.")
 
 
 def main():
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     if not token:
-        raise ValueError("TELEGRAM_BOT_TOKEN не задан!")
+        raise ValueError("TELEGRAM_BOT_TOKEN не задано!")
 
     app = Application.builder().token(token).build()
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("refresh_token", refresh_token))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("refresh_token", refresh_token))
     app.add_handler(CallbackQueryHandler(handle_callback))
 
-    logger.info("Бот запущен!")
-    app.run_polling(
-        drop_pending_updates=True,  # игнорируем накопившиеся апдейты при старте
-        allowed_updates=Update.ALL_TYPES,
-    )
+    logger.info("Бот запущено!")
+    app.run_polling(drop_pending_updates=True, allowed_updates=Update.ALL_TYPES)
+
 
 if __name__ == "__main__":
     main()
-# Этот блок заменяет функцию main() — скопируй весь файл целиком

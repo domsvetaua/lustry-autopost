@@ -3,7 +3,7 @@ import base64
 import os
 
 BRAND_HASHTAGS = {
-    "настольная лампа": ("#domsvetalamp", "настольних ламп"),
+    "настольная лампа": ("#domsvetalamp", "настільних ламп"),
     "плафонная люстра": ("#domsvetaplaf", "плафонних люстр"),
     "классическая люстра": ("#domsvetaclassic", "класичних люстр"),
     "светодиодная люстра": ("#domsvetaled", "світлодіодних люстр"),
@@ -13,22 +13,23 @@ BRAND_HASHTAGS = {
 }
 
 async def generate_post_text(photo_bytes: bytes, characteristics: str = "") -> tuple:
+    """Возвращает (fb_text, ig_text, fb_preview, ig_preview)"""
     client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
     image_data = base64.standard_b64encode(photo_bytes).decode("utf-8")
 
     char_block = ""
     if characteristics:
         char_block = f"""
-Дополнительные характеристики от продавца:
+Додаткові характеристики від продавця:
 {characteristics}
-Обязательно используй эти характеристики в описании.
+Обов'язково використай ці характеристики в описі.
 """
 
     categories = "\n".join([f'- "{k}"' for k in BRAND_HASHTAGS.keys()])
 
     message = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=1500,
+        max_tokens=2000,
         messages=[{
             "role": "user",
             "content": [
@@ -38,37 +39,45 @@ async def generate_post_text(photo_bytes: bytes, characteristics: str = "") -> t
                 },
                 {
                     "type": "text",
-                    "text": f"""Ти — професійний копірайтер для інтернет-магазину люстр "Дом Света" (Харків, Україна).
+                    "text": f"""Ти — профессійний копірайтер магазину люстр "Дом Света" (Харків, Україна).
 
-Подивись на фото і виконай два завдання:
+Подивись на фото і виконай завдання:
 
-=== ЗАВДАННЯ 1: КАТЕГОРІЯ ===
+=== КРОК 1: КАТЕГОРІЯ ===
 Визнач категорію з списку (вибери одну):
 {categories}
-
-=== ЗАВДАННЯ 2: ПОСТ ===
 {char_block}
 
-ПРАВИЛА INSTAGRAM 2026:
+=== КРОК 2: ПОСТ ДЛЯ FACEBOOK ===
 
-1. СТРУКТУРА:
-   - Рядки 1-2: яскравий гачок з емодзі (видно до "читати далі")
-   - Основна частина: опис, матеріал, стиль, переваги, для яких інтер'єрів
-   - SEO-ключові слова природно в тексті
-   - Передостанній абзац ОБОВ'ЯЗКОВО: "Більше [назва категорії] знайдете у нас на сайті за посиланням у шапці профілю або за хештегом [BRAND_HASHTAG]"
-   - Довжина: 150-250 слів
+Алгоритм Facebook 2026 — обов'язкові правила:
+- Рядки 1-2: КРЮЧОК з емодзі — питання, факт або емоція (це єдине що видно до "читати далі")
+- Рядки 3-8: опис товару з SEO-ключовими словами природно в тексті
+- Рядки 9-10: переваги + конкретний CTA ("Напиши в повідомлення" або "Телефонуй")
+- Передостанній рядок: питання для коментарів — просте і конкретне (генерує залученість)
+- Рядок перед хештегами: "Більше [назва категорії] за хештегом [BRAND_HASHTAG]"
+- Останній рядок: рівно 3 хештеги — #люстра + #харків + [BRAND_HASHTAG]
+- НЕ додавай посилання на сайт в тексті (Facebook знижує охоплення)
+- Довжина: 100-150 слів
 
-2. ХЕШТЕГИ (рівно 4 — після тексту, окремим рядком):
-   - 1 широкий: #люстра або #світильник
-   - 2 нішевих: стиль/матеріал
-   - 1 локальний: #харків
-   - НЕ додавай брендовий хештег у блок хештегів — він вже є в тексті!
+=== КРОК 3: ПОСТ ДЛЯ INSTAGRAM ===
+
+Алгоритм Instagram 2026 — обов'язкові правила:
+- Рядки 1-2: КРЮЧОК з емодзі — інший ніж у Facebook, більш візуальний і емоційний
+- Рядки 3-8: опис товару — більш образний і натхненний стиль ніж у Facebook
+- Рядки 9-10: CTA з посиланням у шапці профілю
+- Передостанній рядок: "Більше [назва категорії] у нас на сайті за посиланням у шапці профілю або за хештегом [BRAND_HASHTAG]"
+- Останній рядок: рівно 5 хештегів — 1 широкий + 2 нішевих + 1 локальний #харків + [BRAND_HASHTAG]
+- Довжина: 150-200 слів
 
 === ФОРМАТ ВІДПОВІДІ ===
 КАТЕГОРІЯ: [категорія]
 
-ТЕКСТ ПОСТА:
-[повний текст з хештегами в кінці]
+FACEBOOK:
+[текст поста для Facebook]
+
+INSTAGRAM:
+[текст поста для Instagram]
 
 ГЕОТЕГ: Харків / Kharkiv, Ukraine"""
                 }
@@ -78,43 +87,45 @@ async def generate_post_text(photo_bytes: bytes, characteristics: str = "") -> t
 
     raw = message.content[0].text
     category = ""
-    post_text = ""
+    fb_text = ""
+    ig_text = ""
     geotag = ""
     mode = None
 
     for line in raw.strip().split("\n"):
-        if line.startswith("КАТЕГОРІЯ:") or line.startswith("КАТЕГОРИЯ:"):
-            category = line.split(":", 1)[1].strip().lower()
-        elif line.startswith("ТЕКСТ ПОСТА:") or line.startswith("ТЕКСТ ПОСТУ:"):
-            mode = "post"
-        elif line.startswith("ГЕОТЕГ:"):
+        l = line.strip()
+        if l.startswith("КАТЕГОРІЯ:") or l.startswith("КАТЕГОРИЯ:"):
+            category = l.split(":", 1)[1].strip().lower()
             mode = None
-            geotag = line.replace("ГЕОТЕГ:", "").strip()
-        elif mode == "post":
-            post_text += line + "\n"
+        elif l == "FACEBOOK:":
+            mode = "fb"
+        elif l == "INSTAGRAM:":
+            mode = "ig"
+        elif l.startswith("ГЕОТЕГ:"):
+            geotag = l.replace("ГЕОТЕГ:", "").strip()
+            mode = None
+        elif mode == "fb":
+            fb_text += line + "\n"
+        elif mode == "ig":
+            ig_text += line + "\n"
 
-    post_text = post_text.strip()
+    fb_text = fb_text.strip()
+    ig_text = ig_text.strip()
 
-    # Подставляем брендовый хештег в текст
+    # Подставляем брендовый хештег
     for key, (hashtag, category_name) in BRAND_HASHTAGS.items():
         if key in category:
-            post_text = post_text.replace("[BRAND_HASHTAG]", hashtag)
-            # Если Claude не вставил хештег в текст — добавляем принудительно
-            if hashtag not in post_text:
-                # Ищем фразу про сайт и добавляем хештег после неё
-                phrases = ["за хештегом", "за хэштегом"]
-                for phrase in phrases:
-                    if phrase in post_text:
-                        idx = post_text.find(phrase) + len(phrase)
-                        post_text = post_text[:idx] + f" {hashtag}" + post_text[idx:]
-                        break
-                else:
-                    post_text += f"\n{hashtag}"
+            fb_text = fb_text.replace("[BRAND_HASHTAG]", hashtag)
+            ig_text = ig_text.replace("[BRAND_HASHTAG]", hashtag)
+            if hashtag not in fb_text:
+                fb_text += f"\n{hashtag}"
+            if hashtag not in ig_text:
+                ig_text += f"\n{hashtag}"
             break
 
-    post_for_publishing = post_text
-    post_for_preview = post_text
+    # Превью с геотегом для Instagram
+    ig_preview = ig_text
     if geotag:
-        post_for_preview += f"\n\n📍 Геотег для ручного добавления: {geotag}"
+        ig_preview += f"\n\n📍 Геотег для ручного додавання: {geotag}"
 
-    return post_for_publishing, post_for_preview
+    return fb_text, ig_text, fb_text, ig_preview
