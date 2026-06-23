@@ -114,15 +114,53 @@ INSTAGRAM:
     ig_text = ig_text.strip()
 
     # Подставляем брендовый хештег
+    brand_hashtag = ""
     for key, (hashtag, category_name) in BRAND_HASHTAGS.items():
         if key in category:
-            fb_text = fb_text.replace("[BRAND_HASHTAG]", hashtag)
-            ig_text = ig_text.replace("[BRAND_HASHTAG]", hashtag)
-            if hashtag not in fb_text:
-                fb_text += f"\n{hashtag}"
-            if hashtag not in ig_text:
-                ig_text += f"\n{hashtag}"
+            brand_hashtag = hashtag
             break
+
+    if brand_hashtag:
+        # Заменяем плейсхолдер
+        fb_text = fb_text.replace("[BRAND_HASHTAG]", brand_hashtag)
+        ig_text = ig_text.replace("[BRAND_HASHTAG]", brand_hashtag)
+
+        # === FACEBOOK: оставляем только брендовый хештег ===
+        fb_lines = fb_text.strip().split("\n")
+        clean_fb_lines = []
+        for line in fb_lines:
+            stripped = line.strip()
+            # Убираем строки с хештегами, кроме брендового
+            if stripped.startswith("#") and brand_hashtag not in stripped:
+                continue
+            clean_fb_lines.append(line)
+        fb_text = "\n".join(clean_fb_lines).strip()
+        if brand_hashtag not in fb_text:
+            fb_text += f"\n{brand_hashtag}"
+
+        # === INSTAGRAM: брендовый хештег должен быть ВНУТРИ текста (после "за хештегом") ===
+        # Убираем брендовый хештег если он стоит отдельной строкой в конце
+        ig_lines = ig_text.strip().split("\n")
+        # Проверяем последнюю строку — если там только брендовый хештег отдельно, убираем
+        while ig_lines and ig_lines[-1].strip() == brand_hashtag:
+            ig_lines.pop()
+        ig_text = "\n".join(ig_lines).strip()
+
+        # Проверяем что брендовый хештег есть в тексте (внутри фразы)
+        if brand_hashtag not in ig_text:
+            # Ищем фразу "за хештегом" и вставляем после неё
+            if "за хештегом" in ig_text:
+                ig_text = ig_text.replace("за хештегом", f"за хештегом {brand_hashtag}", 1)
+            else:
+                # Ищем последнюю строку с хештегами и добавляем туда
+                ig_lines = ig_text.split("\n")
+                for i in range(len(ig_lines)-1, -1, -1):
+                    if ig_lines[i].strip().startswith("#"):
+                        ig_lines[i] = ig_lines[i].rstrip() + f" {brand_hashtag}"
+                        break
+                else:
+                    ig_text += f"\n{brand_hashtag}"
+                ig_text = "\n".join(ig_lines)
 
     # Превью с геотегом для Instagram
     ig_preview = ig_text
