@@ -1,6 +1,10 @@
 import anthropic
 import base64
 import os
+import re
+import logging
+
+logger = logging.getLogger(__name__)
 
 BRAND_HASHTAGS = {
     "настольная лампа": ("#domsvetalamp", "настільних ламп"),
@@ -13,7 +17,6 @@ BRAND_HASHTAGS = {
 }
 
 async def generate_post_text(photo_bytes: bytes, characteristics: str = "") -> tuple:
-    """Возвращает (fb_text, ig_text, fb_preview, ig_preview)"""
     client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
     image_data = base64.standard_b64encode(photo_bytes).decode("utf-8")
 
@@ -39,7 +42,7 @@ async def generate_post_text(photo_bytes: bytes, characteristics: str = "") -> t
                 },
                 {
                     "type": "text",
-                    "text": f"""Ти — профессійний копірайтер магазину люстр "Дом Света" (Харків, Україна).
+                    "text": f"""Ти — професійний копірайтер магазину люстр "Дом Света" (Харків, Україна).
 
 Подивись на фото і виконай завдання:
 
@@ -50,25 +53,26 @@ async def generate_post_text(photo_bytes: bytes, characteristics: str = "") -> t
 
 === КРОК 2: ПОСТ ДЛЯ FACEBOOK ===
 
-Алгоритм Facebook 2026 — обов'язкові правила:
-- Рядки 1-2: КРЮЧОК з емодзі — питання, факт або емоція (це єдине що видно до "читати далі")
-- Рядки 3-8: опис товару з SEO-ключовими словами природно в тексті
-- Рядки 9-10: переваги + конкретний CTA ("Напиши в повідомлення" або "Телефонуй")
-- Передостанній рядок: питання для коментарів — просте і конкретне (генерує залученість)
-- Рядок перед хештегами: "Більше [назва категорії] за хештегом [BRAND_HASHTAG]"
-- Останній рядок: рівно 3 хештеги — #люстра + #харків + [BRAND_HASHTAG]
-- НЕ додавай посилання на сайт в тексті (Facebook знижує охоплення)
+Правила Facebook 2026:
+- Рядки 1-2: крючок з емодзі — питання або факт (видно до "читати далі")
+- Рядки 3-8: опис товару, SEO-ключові слова природно в тексті
+- Рядки 9-10: переваги + CTA ("Напиши в повідомлення")
+- Передостанній рядок: питання для коментарів (генерує залученість)
+- Останній рядок: ОБОВ'ЯЗКОВО напиши повністю: "Більше [назва категорії] знайдете на нашій сторінці — посилання на сайт у розділі 'Про нас'."
+- ЗАБОРОНЕНО: жодних хештегів, жодного слова "хештег", жодного слова "безкоштовно"
 - Довжина: 100-150 слів
 
 === КРОК 3: ПОСТ ДЛЯ INSTAGRAM ===
 
-Алгоритм Instagram 2026 — обов'язкові правила:
-- Рядки 1-2: КРЮЧОК з емодзі — інший ніж у Facebook, більш візуальний і емоційний
-- Рядки 3-8: опис товару — більш образний і натхненний стиль ніж у Facebook
-- Рядки 9-10: CTA з посиланням у шапці профілю
-- Передостанній рядок: "Більше [назва категорії] у нас на сайті за посиланням у шапці профілю або за хештегом [BRAND_HASHTAG]"
-- Останній рядок: рівно 5 хештегів — 1 широкий + 2 нішевих + 1 локальний #харків + [BRAND_HASHTAG]
-- НЕ згадуй "безкоштовна доставка" або "бесплатная доставка" — ніколи!
+Правила Instagram 2026:
+- Рядки 1-2: крючок з емодзі — інший ніж у Facebook, більш візуальний
+- Рядки 3-7: образний опис товару, SEO-ключові слова природно в тексті
+- Рядок 8: питання для коментарів — особисте і конкретне
+- Рядок 9: CTA з посиланням у шапці профілю
+- Рядок 10: ОБОВ'ЯЗКОВО напиши точно: "Більше [назва категорії] у нас на сайті за посиланням у шапці профілю або за хештегом [BRAND_HASHTAG]" — тільки [BRAND_HASHTAG], більше нічого в цьому рядку!
+- Порожній рядок
+- Останній рядок: 4-5 хештегів на основі характеристик товару (матеріал, стиль, тип) — БЕЗ будь-яких брендових тегів!
+- ЗАБОРОНЕНО: слово "безкоштовно", брендові теги в блоці хештегів
 - Довжина: 150-200 слів
 
 === ФОРМАТ ВІДПОВІДІ ===
@@ -87,7 +91,8 @@ INSTAGRAM:
     )
 
     raw = message.content[0].text
-    import logging; logging.getLogger(__name__).info(f"Claude raw response: {raw[:500]}")
+    logger.info(f"Claude raw: {raw[:300]}")
+
     category = ""
     fb_text = ""
     ig_text = ""
@@ -99,86 +104,83 @@ INSTAGRAM:
         if l.startswith("КАТЕГОРІЯ:") or l.startswith("КАТЕГОРИЯ:"):
             category = l.split(":", 1)[1].strip().lower()
             mode = None
-        elif l in ("FACEBOOK:", "**FACEBOOK:**", "## FACEBOOK:", "### FACEBOOK:") or l.startswith("FACEBOOK:"):
+        elif l.startswith("FACEBOOK:"):
             mode = "fb"
-        elif l in ("INSTAGRAM:", "**INSTAGRAM:**", "## INSTAGRAM:", "### INSTAGRAM:") or l.startswith("INSTAGRAM:"):
+        elif l.startswith("INSTAGRAM:"):
             mode = "ig"
         elif l.startswith("ГЕОТЕГ:"):
             geotag = l.replace("ГЕОТЕГ:", "").strip()
             mode = None
-        elif mode == "fb" and not l.startswith("INSTAGRAM") and not l.startswith("ГЕОТЕГ"):
+        elif mode == "fb":
             fb_text += line + "\n"
-        elif mode == "ig" and not l.startswith("ГЕОТЕГ"):
+        elif mode == "ig":
             ig_text += line + "\n"
 
     fb_text = fb_text.strip()
     ig_text = ig_text.strip()
 
-    # Подставляем брендовый хештег
+    # Знаходимо брендовий хештег
     brand_hashtag = ""
-    for key, (hashtag, category_name) in BRAND_HASHTAGS.items():
+    category_name = ""
+    for key, (hashtag, cat_name) in BRAND_HASHTAGS.items():
         if key in category:
             brand_hashtag = hashtag
+            category_name = cat_name
             break
 
-    if brand_hashtag:
-        # Заменяем плейсхолдер
-        fb_text = fb_text.replace("[BRAND_HASHTAG]", brand_hashtag)
-        ig_text = ig_text.replace("[BRAND_HASHTAG]", brand_hashtag)
+    # === ЧИСТИМО FACEBOOK ===
+    fb_lines = fb_text.strip().split("\n")
+    clean_fb = []
+    for line in fb_lines:
+        # Видаляємо рядки що починаються з хештегу
+        if line.strip().startswith("#"):
+            continue
+        # Видаляємо хештеги з середини рядків
+        words = line.split()
+        words = [w for w in words if not w.startswith("#")]
+        clean_line = " ".join(words).strip()
+        # Видаляємо обірвані фрази про хештег
+        clean_line = re.sub(r'\s*(або за хештегом|за хештегом)\s*\S*\s*$', '', clean_line).strip()
+        clean_line = re.sub(r'\s*(або за хештегом|за хештегом)\s*$', '', clean_line).strip()
+        if clean_line:
+            clean_fb.append(clean_line)
+    fb_text = "\n".join(clean_fb).strip()
 
-        # === FACEBOOK: убираем ВСЕ хештеги, чистим текст ===
-        fb_lines = fb_text.strip().split("\n")
-        clean_fb_lines = []
-        for line in fb_lines:
-            stripped = line.strip()
-            if stripped.startswith("#"):
-                continue
-            # Убираем хештеги из середины строк
+    # === ЧИСТИМО INSTAGRAM ===
+    ig_text = ig_text.replace("[BRAND_HASHTAG]", brand_hashtag)
+
+    def is_brand_tag(tag: str) -> bool:
+        t = tag.lower().lstrip("#")
+        brand_words = ["дом", "dom", "свет", "svet", "sveta"]
+        return any(w in t for w in brand_words)
+
+    ig_lines = ig_text.strip().split("\n")
+    clean_ig = []
+    for line in ig_lines:
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            # З блоку хештегів прибираємо всі брендові теги
+            tags = stripped.split()
+            clean_tags = [t for t in tags if not is_brand_tag(t)]
+            if clean_tags:
+                clean_ig.append(" ".join(clean_tags))
+        else:
+            # З тексту прибираємо брендові теги крім дозволеного
             words = line.split()
-            clean_words = [w for w in words if not w.startswith("#")]
-            clean_line = " ".join(clean_words)
-            # Если строка содержит ТОЛЬКО "за хештегом" без продолжения — убираем
-            # Но не трогаем строки где есть нормальный текст перед этим
-            import re
-            clean_line = re.sub(r"\s*(або за хештегом|за хештегом)\s*$", "", clean_line).strip()
-            if clean_line:
-                clean_fb_lines.append(clean_line)
-        fb_text = "\n".join(clean_fb_lines).strip()
+            clean_words = []
+            for w in words:
+                if w.startswith("#") and is_brand_tag(w) and w.lower() != brand_hashtag.lower():
+                    continue
+                clean_words.append(w)
+            clean_ig.append(" ".join(clean_words))
+    ig_text = "\n".join(clean_ig).strip()
 
-        # === INSTAGRAM: чистим хештеги ===
-        def is_brand_tag(tag: str) -> bool:
-            """Проверяет является ли тег брендовым (содержит дом/свет/dom/svet)"""
-            t = tag.lower().lstrip("#")
-            brand_words = ["дом", "dom", "свет", "svet", "sveta", "домсв"]
-            return any(w in t for w in brand_words)
+    # Перевіряємо що брендовий хештег є в тексті Instagram
+    if brand_hashtag and brand_hashtag not in ig_text:
+        if "за хештегом" in ig_text:
+            ig_text = ig_text.replace("за хештегом", f"за хештегом {brand_hashtag}", 1)
 
-        ig_lines = ig_text.strip().split("\n")
-        clean_ig_lines = []
-        for line in ig_lines:
-            stripped = line.strip()
-            if stripped.startswith("#"):
-                # Из блока хештегов убираем ВСЕ брендовые теги
-                tags = stripped.split()
-                clean_tags = [t for t in tags if not is_brand_tag(t)]
-                if clean_tags:
-                    clean_ig_lines.append(" ".join(clean_tags))
-            else:
-                # Из текста убираем брендовые теги кроме разрешённого brand_hashtag
-                words = line.split()
-                clean_words = []
-                for w in words:
-                    if w.startswith("#") and is_brand_tag(w) and w.lower() != brand_hashtag.lower():
-                        continue
-                    clean_words.append(w)
-                clean_ig_lines.append(" ".join(clean_words))
-        ig_text = "\n".join(clean_ig_lines).strip()
-
-        # Убедимся что брендовый хештег есть в тексте (в фразе "за хештегом")
-        if brand_hashtag not in ig_text:
-            if "за хештегом" in ig_text:
-                ig_text = ig_text.replace("за хештегом", f"за хештегом {brand_hashtag}", 1)
-
-    # Превью с геотегом для Instagram
+    # Превью для Instagram з геотегом
     ig_preview = ig_text
     if geotag:
         ig_preview += f"\n\n📍 Геотег для ручного додавання: {geotag}"
