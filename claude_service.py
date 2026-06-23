@@ -68,6 +68,7 @@ async def generate_post_text(photo_bytes: bytes, characteristics: str = "") -> t
 - Рядки 9-10: CTA з посиланням у шапці профілю
 - Передостанній рядок: "Більше [назва категорії] у нас на сайті за посиланням у шапці профілю або за хештегом [BRAND_HASHTAG]"
 - Останній рядок: рівно 5 хештегів — 1 широкий + 2 нішевих + 1 локальний #харків + [BRAND_HASHTAG]
+- НЕ згадуй "безкоштовна доставка" або "бесплатная доставка" — ніколи!
 - Довжина: 150-200 слів
 
 === ФОРМАТ ВІДПОВІДІ ===
@@ -125,18 +126,15 @@ INSTAGRAM:
         fb_text = fb_text.replace("[BRAND_HASHTAG]", brand_hashtag)
         ig_text = ig_text.replace("[BRAND_HASHTAG]", brand_hashtag)
 
-        # === FACEBOOK: оставляем только брендовый хештег ===
+        # === FACEBOOK: убираем ВСЕ хештеги ===
         fb_lines = fb_text.strip().split("\n")
         clean_fb_lines = []
         for line in fb_lines:
             stripped = line.strip()
-            # Убираем строки с хештегами, кроме брендового
-            if stripped.startswith("#") and brand_hashtag not in stripped:
+            if stripped.startswith("#"):
                 continue
             clean_fb_lines.append(line)
         fb_text = "\n".join(clean_fb_lines).strip()
-        if brand_hashtag not in fb_text:
-            fb_text += f"\n{brand_hashtag}"
 
         # === INSTAGRAM: брендовый хештег должен быть ВНУТРИ текста (после "за хештегом") ===
         # Убираем брендовый хештег если он стоит отдельной строкой в конце
