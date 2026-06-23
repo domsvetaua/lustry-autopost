@@ -17,15 +17,23 @@ user_states = {}
 pending_posts = {}
 
 BEST_TIMES = ["18:00", "19:00", "20:00", "21:00"]
+KYIV_UTC_OFFSET = 3  # UTC+3
+
+def get_now_kyiv():
+    """Поточний час у Харкові (UTC+3)"""
+    from datetime import timezone
+    utc_now = datetime.now(timezone.utc)
+    return utc_now + timedelta(hours=KYIV_UTC_OFFSET)
 
 def get_next_best_time() -> tuple:
-    now = datetime.now()
+    now = get_now_kyiv().replace(tzinfo=None)
     today = now.date()
     for time_str in BEST_TIMES:
         h, m = map(int, time_str.split(":"))
         candidate = datetime.combine(today, datetime.min.time().replace(hour=h, minute=m))
-        if candidate > now + timedelta(minutes=5):
+        if candidate > now + timedelta(minutes=10):
             return candidate, time_str
+    # Всі часи сьогодні минули — беремо перший завтра
     tomorrow = today + timedelta(days=1)
     h, m = map(int, BEST_TIMES[0].split(":"))
     candidate = datetime.combine(tomorrow, datetime.min.time().replace(hour=h, minute=m))
@@ -172,7 +180,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(
             query.message.text.split("---")[0].strip() + f"\n\n---\n⏰ Вибрано: заплановано на {time_label}"
         )
-        delay = (next_time - datetime.now()).total_seconds()
+        delay = (next_time - get_now_kyiv().replace(tzinfo=None)).total_seconds()
         asyncio.get_event_loop().call_later(
             delay, lambda: asyncio.ensure_future(publish_facebook_scheduled(context, chat_id))
         )
@@ -203,7 +211,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(
             query.message.text.split("---")[0].strip() + f"\n\n---\n⏰ Вибрано: заплановано на {time_label}"
         )
-        delay = (next_time - datetime.now()).total_seconds()
+        delay = (next_time - get_now_kyiv().replace(tzinfo=None)).total_seconds()
         asyncio.get_event_loop().call_later(
             delay, lambda: asyncio.ensure_future(publish_instagram_scheduled(context, chat_id))
         )
