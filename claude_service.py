@@ -126,39 +126,45 @@ INSTAGRAM:
         fb_text = fb_text.replace("[BRAND_HASHTAG]", brand_hashtag)
         ig_text = ig_text.replace("[BRAND_HASHTAG]", brand_hashtag)
 
-        # === FACEBOOK: убираем ВСЕ хештеги ===
+        # === FACEBOOK: убираем ВСЕ хештеги и брендовые теги из текста ===
         fb_lines = fb_text.strip().split("\n")
         clean_fb_lines = []
         for line in fb_lines:
             stripped = line.strip()
             if stripped.startswith("#"):
                 continue
-            clean_fb_lines.append(line)
+            # Убираем хештеги из середины строк тоже
+            words = line.split()
+            clean_words = [w for w in words if not w.startswith("#")]
+            clean_fb_lines.append(" ".join(clean_words))
         fb_text = "\n".join(clean_fb_lines).strip()
 
         # === INSTAGRAM: чистим хештеги ===
-        # Список тегов которые нельзя использовать нигде кроме фразы в тексте
-        banned_tags = ["#домсвіта", "#домсвета", "#domsvetakharkiv", "#домсветахарків",
-                       "#домсвета_харків", "#domsveta_kharkiv"]
-        # Добавляем сам брендовый тег в список запрещённых ДЛЯ БЛОКА ХЕШТЕГОВ
-        banned_in_hashtag_block = banned_tags + [brand_hashtag]
+        def is_brand_tag(tag: str) -> bool:
+            """Проверяет является ли тег брендовым (содержит дом/свет/dom/svet)"""
+            t = tag.lower().lstrip("#")
+            brand_words = ["дом", "dom", "свет", "svet", "sveta", "домсв"]
+            return any(w in t for w in brand_words)
 
         ig_lines = ig_text.strip().split("\n")
         clean_ig_lines = []
         for line in ig_lines:
             stripped = line.strip()
             if stripped.startswith("#"):
-                # Из блока хештегов убираем брендовый тег и запрещённые
+                # Из блока хештегов убираем ВСЕ брендовые теги
                 tags = stripped.split()
-                clean_tags = [t for t in tags if t.lower() not in [b.lower() for b in banned_in_hashtag_block]]
+                clean_tags = [t for t in tags if not is_brand_tag(t)]
                 if clean_tags:
                     clean_ig_lines.append(" ".join(clean_tags))
             else:
-                # Из текста убираем только запрещённые (не брендовый)
-                clean_line = line
-                for bad in banned_tags:
-                    clean_line = clean_line.replace(bad, "").replace(bad.lower(), "")
-                clean_ig_lines.append(clean_line)
+                # Из текста убираем брендовые теги кроме разрешённого brand_hashtag
+                words = line.split()
+                clean_words = []
+                for w in words:
+                    if w.startswith("#") and is_brand_tag(w) and w.lower() != brand_hashtag.lower():
+                        continue
+                    clean_words.append(w)
+                clean_ig_lines.append(" ".join(clean_words))
         ig_text = "\n".join(clean_ig_lines).strip()
 
         # Убедимся что брендовый хештег есть в тексте (в фразе "за хештегом")
