@@ -86,6 +86,7 @@ INSTAGRAM:
     )
 
     raw = message.content[0].text
+    import logging; logging.getLogger(__name__).info(f"Claude raw response: {raw[:500]}")
     category = ""
     fb_text = ""
     ig_text = ""
@@ -97,16 +98,16 @@ INSTAGRAM:
         if l.startswith("КАТЕГОРІЯ:") or l.startswith("КАТЕГОРИЯ:"):
             category = l.split(":", 1)[1].strip().lower()
             mode = None
-        elif l == "FACEBOOK:":
+        elif l in ("FACEBOOK:", "**FACEBOOK:**", "## FACEBOOK:", "### FACEBOOK:") or l.startswith("FACEBOOK:"):
             mode = "fb"
-        elif l == "INSTAGRAM:":
+        elif l in ("INSTAGRAM:", "**INSTAGRAM:**", "## INSTAGRAM:", "### INSTAGRAM:") or l.startswith("INSTAGRAM:"):
             mode = "ig"
         elif l.startswith("ГЕОТЕГ:"):
             geotag = l.replace("ГЕОТЕГ:", "").strip()
             mode = None
-        elif mode == "fb":
+        elif mode == "fb" and not l.startswith("INSTAGRAM") and not l.startswith("ГЕОТЕГ"):
             fb_text += line + "\n"
-        elif mode == "ig":
+        elif mode == "ig" and not l.startswith("ГЕОТЕГ"):
             ig_text += line + "\n"
 
     fb_text = fb_text.strip()
