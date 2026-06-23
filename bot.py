@@ -124,9 +124,8 @@ async def show_fb_preview(context, chat_id, fb_text):
     ]
     await context.bot.send_message(
         chat_id=chat_id,
-        text=f"📘 *Текст для Facebook:*\n\n{fb_text}\n\n---\nЩо робимо з Facebook?",
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode="Markdown"
+        text=f"📘 Текст для Facebook:\n\n{fb_text}\n\n---\nЩо робимо з Facebook?",
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 
@@ -140,9 +139,8 @@ async def show_ig_preview(context, chat_id, ig_preview):
     ]
     await context.bot.send_message(
         chat_id=chat_id,
-        text=f"📷 *Текст для Instagram:*\n\n{ig_preview}\n\n---\nЩо робимо з Instagram?",
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode="Markdown"
+        text=f"📷 Текст для Instagram:\n\n{ig_preview}\n\n---\nЩо робимо з Instagram?",
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 
