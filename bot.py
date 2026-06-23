@@ -246,11 +246,5 @@ def main():
     )
 
 if __name__ == "__main__":
-    import time
-    while True:
-        try:
-            main()
-        except Exception as e:
-            logger.error(f"Бот упал с ошибкой: {e}. Перезапуск через 5 секунд...")
-            time.sleep(5)
+    main()
 # Этот блок заменяет функцию main() — скопируй весь файл целиком
