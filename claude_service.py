@@ -175,10 +175,9 @@ INSTAGRAM:
             clean_ig.append(" ".join(clean_words))
     ig_text = "\n".join(clean_ig).strip()
 
-    # Перевіряємо що брендовий хештег є в тексті Instagram
-    if brand_hashtag and brand_hashtag not in ig_text:
-        if "за хештегом" in ig_text:
-            ig_text = ig_text.replace("за хештегом", f"за хештегом {brand_hashtag}", 1)
+    # Завжди вставляємо брендовий хештег після "за хештегом"
+    if brand_hashtag and "за хештегом" in ig_text:
+        ig_text = re.sub(r"за хештегом\s*#?\S*", f"за хештегом {brand_hashtag}", ig_text, count=1)
 
     # Превью для Instagram з геотегом
     ig_preview = ig_text
