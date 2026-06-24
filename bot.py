@@ -87,6 +87,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if state == "waiting_characteristics":
         user_states[chat_id] = "generating"
+        pending_posts[chat_id]["characteristics"] = update.message.text
         await generate_and_show(update, context, chat_id, update.message.text)
 
     elif state == "waiting_edit_fb":
@@ -165,6 +166,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Skip characteristics
     if query.data == "skip_characteristics":
         user_states[chat_id] = "generating"
+        pending_posts[chat_id]["characteristics"] = ""
         await query.edit_message_text("⏳ Генерую тексти для Facebook і Instagram...")
         await generate_and_show(update, context, chat_id, "")
 
