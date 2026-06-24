@@ -69,10 +69,9 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "📸 Фото отримано!\n\n"
         "✍️ Напиши характеристики (необов'язково):\n"
-        "_Наприклад: хрусталь, діаметр 60см, 6 ламп, арт-деко, 4500 грн_\n\n"
+        "Наприклад: хрусталь, діаметр 60см, 6 ламп, арт-деко, 4500 грн\n\n"
         "Або натисни Пропустити.",
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode="Markdown"
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 
