@@ -190,10 +190,33 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_ig_preview(context, chat_id, pending_posts[chat_id].get("ig_preview", ""))
 
     elif query.data == "fb_edit":
+        keyboard = [
+            [InlineKeyboardButton("✏️ Змінити поточний текст", callback_data="fb_edit_manual")],
+            [InlineKeyboardButton("🔄 Згенерувати новий", callback_data="fb_edit_regenerate")],
+        ]
+        await query.edit_message_text(
+            query.message.text.split("---")[0].strip() + "\n\n---\n✏️ Що хочеш зробити?",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+    elif query.data == "fb_edit_manual":
         user_states[chat_id] = "waiting_edit_fb"
         await query.edit_message_text(
-            query.message.text.split("---")[0].strip() + "\n\n---\n✏️ Вибрано: змінити текст\n\nНадішли новий текст:"
+            query.message.text.split("---")[0].strip() + "\n\n---\n✏️ Надішли новий текст:"
         )
+
+    elif query.data == "fb_edit_regenerate":
+        await query.edit_message_text("🔄 Генерую новий текст для Facebook...")
+        try:
+            photo_bytes = pending_posts[chat_id]["photo_bytes"]
+            chars = pending_posts[chat_id].get("characteristics", "")
+            fb_text, ig_text, fb_preview, ig_preview = await generate_post_text(photo_bytes, chars)
+            pending_posts[chat_id]["fb_text"] = fb_text
+            pending_posts[chat_id]["ig_text"] = ig_text
+            pending_posts[chat_id]["ig_preview"] = ig_preview
+            await show_fb_preview(context, chat_id, fb_preview)
+        except Exception as e:
+            await context.bot.send_message(chat_id=chat_id, text=f"❌ Помилка: {str(e)}")
 
     elif query.data == "fb_skip":
         await query.edit_message_text(
@@ -219,10 +242,33 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     elif query.data == "ig_edit":
+        keyboard = [
+            [InlineKeyboardButton("✏️ Змінити поточний текст", callback_data="ig_edit_manual")],
+            [InlineKeyboardButton("🔄 Згенерувати новий", callback_data="ig_edit_regenerate")],
+        ]
+        await query.edit_message_text(
+            query.message.text.split("---")[0].strip() + "\n\n---\n✏️ Що хочеш зробити?",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+    elif query.data == "ig_edit_manual":
         user_states[chat_id] = "waiting_edit_ig"
         await query.edit_message_text(
-            query.message.text.split("---")[0].strip() + "\n\n---\n✏️ Вибрано: змінити текст\n\nНадішли новий текст:"
+            query.message.text.split("---")[0].strip() + "\n\n---\n✏️ Надішли новий текст:"
         )
+
+    elif query.data == "ig_edit_regenerate":
+        await query.edit_message_text("🔄 Генерую новий текст для Instagram...")
+        try:
+            photo_bytes = pending_posts[chat_id]["photo_bytes"]
+            chars = pending_posts[chat_id].get("characteristics", "")
+            fb_text, ig_text, fb_preview, ig_preview = await generate_post_text(photo_bytes, chars)
+            pending_posts[chat_id]["fb_text"] = fb_text
+            pending_posts[chat_id]["ig_text"] = ig_text
+            pending_posts[chat_id]["ig_preview"] = ig_preview
+            await show_ig_preview(context, chat_id, ig_preview)
+        except Exception as e:
+            await context.bot.send_message(chat_id=chat_id, text=f"❌ Помилка: {str(e)}")
 
     elif query.data == "ig_skip":
         await query.edit_message_text(
