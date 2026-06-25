@@ -1,13 +1,48 @@
 import os
+import io
 import httpx
+from PIL import Image
 from token_manager import get_fb_token, get_ig_token
 
 FB_PAGE_ID = os.getenv("FB_PAGE_ID")
 IG_ACCOUNT_ID = os.getenv("IG_ACCOUNT_ID")
 
+# Instagram приймає співвідношення сторін від 4:5 (0.8) до 1.91:1 (1.91)
+IG_MIN_RATIO = 0.8
+IG_MAX_RATIO = 1.91
+
+
+def normalize_image(photo_bytes: bytes, bg=(255, 255, 255)) -> bytes:
+    """Приводить фото до пропорцій, прийнятних для Instagram.
+    Якщо фото вже в допустимих межах — повертає як є (тільки перекодовує в JPEG).
+    Інакше підкладає на квадратне біле полотно, не обрізаючи товар."""
+    try:
+        img = Image.open(io.BytesIO(photo_bytes)).convert("RGB")
+        w, h = img.size
+        ratio = w / h
+
+        if IG_MIN_RATIO <= ratio <= IG_MAX_RATIO:
+            out = io.BytesIO()
+            img.save(out, format="JPEG", quality=95)
+            return out.getvalue()
+
+        # підкладаємо на квадратне полотно
+        side = max(w, h)
+        canvas = Image.new("RGB", (side, side), bg)
+        offset = ((side - w) // 2, (side - h) // 2)
+        canvas.paste(img, offset)
+
+        out = io.BytesIO()
+        canvas.save(out, format="JPEG", quality=95)
+        return out.getvalue()
+    except Exception:
+        # якщо щось пішло не так — повертаємо оригінал, щоб не зламати постинг
+        return photo_bytes
+
 
 async def post_to_facebook(photo_bytes: bytes, text: str) -> dict:
     try:
+        photo_bytes = normalize_image(photo_bytes)
         token = await get_fb_token()
         async with httpx.AsyncClient(timeout=60) as client:
             response = await client.post(
@@ -29,6 +64,7 @@ async def post_to_facebook(photo_bytes: bytes, text: str) -> dict:
 
 async def post_to_instagram(photo_bytes: bytes, text: str) -> dict:
     try:
+        photo_bytes = normalize_image(photo_bytes)
         fb_token = await get_fb_token()
         ig_token = await get_ig_token()
 
