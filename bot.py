@@ -1,7 +1,6 @@
 import logging
 import os
 from datetime import datetime, timedelta
-import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, MessageHandler, CommandHandler, CallbackQueryHandler, filters, ContextTypes
 from claude_service import generate_post_text
@@ -118,7 +117,7 @@ async def generate_and_show(update, context, chat_id, characteristics=""):
         await show_fb_preview(context, chat_id, fb_preview)
 
     except Exception as e:
-        logger.error(f"Помилка: {e}")
+        logger.error(f"Помилка: {e}", exc_info=True)
         await context.bot.edit_message_text(chat_id=chat_id, message_id=msg.message_id, text=f"❌ Помилка: {str(e)}")
 
 
@@ -182,8 +181,12 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             query.message.text.split("---")[0].strip() + f"\n\n---\n⏰ Вибрано: заплановано на {time_label}"
         )
         delay = (next_time - get_now_kyiv().replace(tzinfo=None)).total_seconds()
-        asyncio.get_event_loop().call_later(
-            delay, lambda: asyncio.ensure_future(publish_facebook_scheduled(context, chat_id))
+        # JobQueue замість call_later — надійніше, прив'язано до Application
+        context.job_queue.run_once(
+            scheduled_job,
+            when=max(delay, 1),
+            data={"chat_id": chat_id, "platform": "facebook"},
+            name=f"fb_{chat_id}",
         )
         # Сразу показываем Instagram
         await show_ig_preview(context, chat_id, pending_posts[chat_id].get("ig_preview", ""))
@@ -215,6 +218,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pending_posts[chat_id]["ig_preview"] = ig_preview
             await show_fb_preview(context, chat_id, fb_preview)
         except Exception as e:
+            logger.error(f"Помилка регенерації FB: {e}", exc_info=True)
             await context.bot.send_message(chat_id=chat_id, text=f"❌ Помилка: {str(e)}")
 
     elif query.data == "fb_skip":
@@ -236,8 +240,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             query.message.text.split("---")[0].strip() + f"\n\n---\n⏰ Вибрано: заплановано на {time_label}"
         )
         delay = (next_time - get_now_kyiv().replace(tzinfo=None)).total_seconds()
-        asyncio.get_event_loop().call_later(
-            delay, lambda: asyncio.ensure_future(publish_instagram_scheduled(context, chat_id))
+        context.job_queue.run_once(
+            scheduled_job,
+            when=max(delay, 1),
+            data={"chat_id": chat_id, "platform": "instagram"},
+            name=f"ig_{chat_id}",
         )
 
     elif query.data == "ig_edit":
@@ -267,6 +274,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pending_posts[chat_id]["ig_preview"] = ig_preview
             await show_ig_preview(context, chat_id, ig_preview)
         except Exception as e:
+            logger.error(f"Помилка регенерації IG: {e}", exc_info=True)
             await context.bot.send_message(chat_id=chat_id, text=f"❌ Помилка: {str(e)}")
 
     elif query.data == "ig_skip":
@@ -274,6 +282,19 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             query.message.text.split("---")[0].strip() + "\n\n---\n⏭ Instagram пропущено"
         )
         pending_posts.pop(chat_id, None)
+
+
+async def scheduled_job(context: ContextTypes.DEFAULT_TYPE):
+    """Викликається JobQueue у запланований час."""
+    data = context.job.data
+    chat_id = data["chat_id"]
+    platform = data["platform"]
+    if platform == "facebook":
+        await context.bot.send_message(chat_id=chat_id, text="⏰ Час прийшов! Публікую Facebook...")
+        await publish_facebook(context, chat_id)
+    else:
+        await context.bot.send_message(chat_id=chat_id, text="⏰ Час прийшов! Публікую Instagram...")
+        await publish_instagram(context, chat_id)
 
 
 async def publish_facebook(context, chat_id):
@@ -308,16 +329,6 @@ async def publish_instagram(context, chat_id):
         await context.bot.send_message(chat_id=chat_id, text=f"📷 Instagram: ❌ {result.get('error', 'помилка')}")
 
     pending_posts.pop(chat_id, None)
-
-
-async def publish_facebook_scheduled(context, chat_id):
-    await context.bot.send_message(chat_id=chat_id, text="⏰ Час прийшов! Публікую Facebook...")
-    await publish_facebook(context, chat_id)
-
-
-async def publish_instagram_scheduled(context, chat_id):
-    await context.bot.send_message(chat_id=chat_id, text="⏰ Час прийшов! Публікую Instagram...")
-    await publish_instagram(context, chat_id)
 
 
 async def refresh_token(update: Update, context: ContextTypes.DEFAULT_TYPE):

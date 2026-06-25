@@ -6,6 +6,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Async-клієнт створюємо один раз на рівні модуля
+client = anthropic.AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+
 BRAND_HASHTAGS = {
     "настольная лампа": ("#domsvetalamp", "настільних ламп"),
     "плафонная люстра": ("#domsvetaplaf", "плафонних люстр"),
@@ -17,7 +20,6 @@ BRAND_HASHTAGS = {
 }
 
 async def generate_post_text(photo_bytes: bytes, characteristics: str = "") -> tuple:
-    client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
     image_data = base64.standard_b64encode(photo_bytes).decode("utf-8")
 
     char_block = ""
@@ -30,19 +32,20 @@ async def generate_post_text(photo_bytes: bytes, characteristics: str = "") -> t
 
     categories = "\n".join([f'- "{k}"' for k in BRAND_HASHTAGS.keys()])
 
-    message = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=2000,
-        messages=[{
-            "role": "user",
-            "content": [
-                {
-                    "type": "image",
-                    "source": {"type": "base64", "media_type": "image/jpeg", "data": image_data},
-                },
-                {
-                    "type": "text",
-                    "text": f"""Ти — професійний копірайтер магазину люстр "Дом Света" (Харків, Україна).
+    try:
+        message = await client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=2000,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {"type": "base64", "media_type": "image/jpeg", "data": image_data},
+                    },
+                    {
+                        "type": "text",
+                        "text": f"""Ти — професійний копірайтер магазину люстр "Дом Света" (Харків, Україна).
 
 Подивись на фото і виконай завдання:
 
@@ -85,10 +88,13 @@ INSTAGRAM:
 [текст поста для Instagram]
 
 ГЕОТЕГ: Харків / Kharkiv, Ukraine"""
-                }
-            ],
-        }],
-    )
+                    }
+                ],
+            }],
+        )
+    except Exception as e:
+        logger.error(f"Помилка виклику Anthropic API: {e}", exc_info=True)
+        raise RuntimeError(f"Не вдалося згенерувати текст: {e}")
 
     raw = message.content[0].text
     logger.info(f"Claude raw: {raw[:300]}")
