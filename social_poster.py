@@ -1,5 +1,6 @@
 import os
 import io
+import asyncio
 import httpx
 from PIL import Image
 from token_manager import get_fb_token, get_ig_token
@@ -102,10 +103,30 @@ async def post_to_instagram(photo_bytes: bytes, text: str) -> dict:
                 error = container_result.get("error", {}).get("message", str(container_result))
                 return {"success": False, "error": f"Ошибка контейнера IG: {error}"}
 
+            container_id = container_result["id"]
+
+            # Шаг 3.5: Ждём, пока контейнер обработается (status_code == FINISHED)
+            # Иначе media_publish падает с "Media ID is not available"
+            status = None
+            for _ in range(20):  # до ~40 секунд
+                status_response = await client.get(
+                    f"https://graph.facebook.com/v19.0/{container_id}",
+                    params={"fields": "status_code", "access_token": ig_token}
+                )
+                status = status_response.json().get("status_code")
+                if status == "FINISHED":
+                    break
+                if status == "ERROR":
+                    return {"success": False, "error": "Instagram не зміг обробити фото (status ERROR)"}
+                await asyncio.sleep(2)
+
+            if status != "FINISHED":
+                return {"success": False, "error": f"Контейнер не готовий вчасно (статус: {status})"}
+
             # Шаг 4: Публикуем
             publish_response = await client.post(
                 f"https://graph.facebook.com/v19.0/{IG_ACCOUNT_ID}/media_publish",
-                data={"creation_id": container_result["id"], "access_token": ig_token}
+                data={"creation_id": container_id, "access_token": ig_token}
             )
             publish_result = publish_response.json()
             if "id" in publish_result:
